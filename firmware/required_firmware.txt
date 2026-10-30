@@ -1,0 +1,34 @@
+Put these 26 firmware images in this folder, with exactly these names:
+
+abl.img
+aop.img
+bluetooth.img
+boot.img
+cmnlib64.img
+cmnlib.img
+devcfg.img
+dtbo.img
+featenabler.img
+hyp.img
+imagefv.img
+keymaster.img
+logo.img
+modem.img
+multiimgoem.img
+oplusstanvbk.img
+qupfw.img
+required_firmware.txt
+splash.img
+spunvm.img
+storsec.img
+tz.img
+uefisecapp.img
+vbmeta_system.img
+vbmeta_vendor.img
+xbl_config.img
+xbl.img
+
+Rules:
+- Firmware must match the device. A wrong xbl, abl or tz can hard-brick it.
+- Images must be raw, not sparse.
+- Any other .img file here stops the build.
