@@ -1,0 +1,20 @@
+Put these 13 images in this folder, with exactly these names:
+
+my_bigball.img
+my_carrier.img
+my_engineering.img
+my_heytap.img
+my_manifest.img
+my_product.img
+my_region.img
+my_stock.img
+odm.img
+product.img
+system.img
+system_ext.img
+vendor.img
+
+Rules:
+- Names have no slot suffix: system.img, not system_a.img.
+- Images must be raw, not sparse.
+- Any other .img file here stops the build.

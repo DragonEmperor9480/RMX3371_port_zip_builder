@@ -1,0 +1,65 @@
+#!/sbin/sh
+# Flash the logical partition images in this zip to slot a of RMX3371.
+
+OUTFD="$2"
+ZIPFILE="$3"
+DEVICE="RMX3371"
+BLOCK_DIR="/dev/block/mapper"
+IMAGE_LIST="/tmp/images.list"
+ROM_INFO="/tmp/rom_info.txt"
+
+set -o pipefail 2>/dev/null
+
+ui_print() {
+    printf 'ui_print %s\nui_print\n' "$1" > "/proc/self/fd/$OUTFD"
+}
+
+abort() {
+    ui_print "ERROR: $1"
+    exit 1
+}
+
+PRODUCT="$(getprop ro.product.device)"
+[ "$PRODUCT" = "$DEVICE" ] || abort "device is '$PRODUCT', expected '$DEVICE'"
+
+for tool in unzip dd blockdev sha256sum head cut; do
+    command -v "$tool" >/dev/null || abort "$tool is missing in this recovery"
+done
+
+unzip -p "$ZIPFILE" rom_info.txt > "$ROM_INFO" || abort "could not read rom_info.txt"
+while read -r line; do
+    ui_print "$line"
+done < "$ROM_INFO"
+
+unzip -p "$ZIPFILE" images.list > "$IMAGE_LIST" || abort "could not read images.list"
+[ -s "$IMAGE_LIST" ] || abort "images.list is empty"
+
+# Check everything first, so a bad image stops the install before any write.
+while read -r name size sha; do
+    block="$BLOCK_DIR/${name}_a"
+    [ -e "$block" ] || abort "${name}_a is not mapped"
+    block_size="$(blockdev --getsize64 "$block")" || abort "could not read the size of ${name}_a"
+    [ "$size" -le "$block_size" ] || abort "$name.img ($size) is bigger than ${name}_a ($block_size)"
+done < "$IMAGE_LIST"
+
+SLOT="$(getprop ro.boot.slot_suffix)"
+if [ "$SLOT" = "_a" ]; then
+    ui_print "Slot a is already active"
+else
+    ui_print "Current slot is '$SLOT', setting slot a active"
+    command -v bootctl >/dev/null || abort "bootctl is missing in this recovery"
+    bootctl set-active-boot-slot 0 || abort "could not set slot a active"
+fi
+
+while read -r name size sha; do
+    block="$BLOCK_DIR/${name}_a"
+    ui_print "Flashing ${name}_a"
+    blockdev --setrw "$block" || abort "could not make ${name}_a writable"
+    unzip -p "$ZIPFILE" "images/$name.img" | dd of="$block" bs=1048576 2>/dev/null || abort "failed to write ${name}_a"
+    sync
+    written="$(head -c "$size" "$block" | sha256sum | cut -d' ' -f1)"
+    [ "$written" = "$sha" ] || abort "${name}_a failed verification"
+done < "$IMAGE_LIST"
+
+ui_print "Done, all images were flashed to slot a"
+exit 0
