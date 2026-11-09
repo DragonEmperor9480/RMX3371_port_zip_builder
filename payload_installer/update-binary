@@ -1,0 +1,57 @@
+#!/sbin/sh
+# Install the payload.bin in this zip on RMX3371.
+# update_engine always writes the inactive slot, then makes that slot active.
+
+OUTFD="$2"
+ZIPFILE="$3"
+DEVICE="RMX3371"
+ENGINE="/system/bin/update_engine_sideload"
+OTACERTS="/system/etc/security/otacerts.zip"
+MIN_BATTERY=30
+
+ui_print() {
+    printf 'ui_print %s\nui_print\n' "$1" > "/proc/self/fd/$OUTFD"
+}
+
+abort() {
+    ui_print "ERROR: $1"
+    exit 1
+}
+
+PRODUCT="$(getprop ro.product.device)"
+[ "$PRODUCT" = "$DEVICE" ] || abort "device is '$PRODUCT', expected '$DEVICE'"
+[ -x "$ENGINE" ] || abort "update_engine_sideload is missing in this recovery"
+
+ROM_INFO="$(unzip -p "$ZIPFILE" rom_info.txt)" || abort "could not read rom_info.txt"
+printf '%s\n' "$ROM_INFO" | while IFS= read -r line; do
+    ui_print "$line"
+done
+ui_print " "
+
+case "$(getprop ro.boot.slot_suffix)" in
+    _a) TARGET="b" ;;
+    _b) TARGET="a" ;;
+    *) abort "could not read the current slot" ;;
+esac
+
+BATTERY="$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)"
+if [ -n "$BATTERY" ] && [ "$BATTERY" -lt "$MIN_BATTERY" ]; then
+    abort "battery is $BATTERY%, charge it to $MIN_BATTERY% first"
+fi
+
+# update_engine checks the payload against this file. The swap lives in RAM.
+unzip -p "$ZIPFILE" otacerts.zip > "$OTACERTS" || abort "could not read otacerts.zip"
+
+OFFSET="$(unzip -p "$ZIPFILE" payload_offset.txt)" || abort "could not read payload_offset.txt"
+HEADERS="$(unzip -p "$ZIPFILE" payload_properties.txt)" || abort "could not read payload_properties.txt"
+
+ui_print "Installing to slot $TARGET"
+"$ENGINE" --payload="file://$ZIPFILE" --offset="$OFFSET" --headers="$HEADERS" \
+    --status_fd="$OUTFD" || abort "install failed, slot $TARGET is not bootable"
+
+ui_print " "
+ui_print "=============================="
+ui_print "    Installation complete"
+ui_print "   Reboot to system on slot $TARGET"
+ui_print "=============================="
+exit 0
